@@ -1,0 +1,5 @@
+{
+  "name": "Lucy Crypto Bot",
+  "description": "A web dashboard for the Lucy Crypto Trading Bot using EMA crossover strategy.",
+  "requestFramePermissions": []
+}
