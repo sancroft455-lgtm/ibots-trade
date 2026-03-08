@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Activity, TrendingUp, TrendingDown, DollarSign, Clock, AlertCircle, CheckCircle2, Zap, Wallet, Euro, Coins, RefreshCw, Play, Square } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, DollarSign, Clock, AlertCircle, CheckCircle2, Zap, Wallet, Euro, Coins, RefreshCw, Play, Square, Banknote } from 'lucide-react';
 import { motion } from 'motion/react';
 
 declare global {
@@ -35,6 +35,30 @@ export default function App() {
   const [ethBalance, setEthBalance] = useState<number | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
+  // Global click tick sound
+  useEffect(() => {
+    const playTick = () => {
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.05, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.05);
+      } catch (e) {}
+    };
+    window.addEventListener('click', playTick);
+    return () => window.removeEventListener('click', playTick);
+  }, []);
+
   const fetchState = useCallback(async () => {
     try {
       const res = await fetch('/api/bot-state');
@@ -63,13 +87,41 @@ export default function App() {
       try {
         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         const address = accounts[0];
+        
+        // Tech Auth: Request cryptographic signature to verify ownership
+        const message = `Welcome to Lucy Bot!\n\nPlease sign this message to authenticate your wallet and enable monetization.\n\nWallet: ${address}`;
+        await window.ethereum.request({
+          method: 'personal_sign',
+          params: [message, address],
+        });
+
         setEthAddress(address);
         await syncMetaMask(address);
       } catch (error) {
-        console.error('User rejected request', error);
+        console.error('User rejected request or auth failed', error);
+        alert('Authentication failed. Please sign the message to connect.');
       }
     } else {
       alert('MetaMask is not installed! Please install it to connect your wallet.');
+    }
+  };
+
+  const handleMonetize = async () => {
+    if (!ethAddress) {
+      alert('Please connect and authenticate your MetaMask wallet first!');
+      return;
+    }
+    try {
+      const res = await fetch('/api/bot/monetize', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        alert(`🎉 Successfully monetized $${data.amount.toFixed(2)} to your wallet!`);
+        fetchState();
+      } else {
+        alert(data.message || 'Could not monetize at this time.');
+      }
+    } catch (error) {
+      console.error('Monetize failed:', error);
     }
   };
 
@@ -264,20 +316,31 @@ export default function App() {
                   {/* MetaMask Background Glow */}
                   <div className="absolute -right-4 -top-4 w-24 h-24 bg-orange-500/5 rounded-full blur-xl pointer-events-none" />
                   
-                  <div className="flex items-center gap-3 mb-4 relative z-10">
-                    <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
-                      <Coins className="w-5 h-5 text-orange-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-zinc-400">Ethereum</p>
-                      <p className="text-xl font-semibold">
-                        {ethBalance !== null ? ethBalance.toFixed(4) : '0.0000'}
-                      </p>
+                  <div className="flex items-center justify-between mb-4 relative z-10">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
+                        <Coins className="w-5 h-5 text-orange-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-zinc-400">Ethereum</p>
+                        <p className="text-xl font-semibold">
+                          {ethBalance !== null ? ethBalance.toFixed(4) : '0.0000'}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right relative z-10">
-                    <p className="text-sm text-zinc-500">Network</p>
-                    <p className="font-mono text-orange-400">Mainnet</p>
+                  <div className="flex items-end justify-between relative z-10">
+                    <button
+                      onClick={handleMonetize}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-xs font-medium text-emerald-400 transition-colors"
+                    >
+                      <Banknote className="w-3.5 h-3.5" />
+                      Monetize
+                    </button>
+                    <div className="text-right">
+                      <p className="text-sm text-zinc-500">Network</p>
+                      <p className="font-mono text-orange-400">Mainnet</p>
+                    </div>
                   </div>
                 </div>
               </div>

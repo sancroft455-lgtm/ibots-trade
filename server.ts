@@ -16,9 +16,9 @@ const OANDA_ACCOUNT_ID = process.env.OANDA_ACCOUNT_ID || '';
 const OANDA_BASE_URL = 'https://api-fxpractice.oanda.com/v3';
 
 // State to hold the latest bot data
-let isBotRunning = true;
+let isBotRunning = false;
 let botState = {
-  status: 'Initializing',
+  status: 'Paused',
   symbol: SYMBOL,
   budget: BUDGET,
   currentPrice: 0,
@@ -127,7 +127,27 @@ async function runBot() {
     addLog(`🔗 Connected to Oanda Broker (Practice)`, 'info');
   }
   
-  botState.status = 'Running';
+  botState.status = isBotRunning ? 'Running' : 'Paused';
+
+  // Do an initial fetch to populate the chart even if paused
+  try {
+    const bars = await fetchOandaCandles();
+    const closes = bars.map((b: any) => b.close);
+    const fastEma = calculateEMA(closes, FAST_EMA_PERIOD);
+    const slowEma = calculateEMA(closes, SLOW_EMA_PERIOD);
+    botState.currentPrice = closes[closes.length - 1] || 0;
+    botState.fastEma = fastEma[fastEma.length - 1] || 0;
+    botState.slowEma = slowEma[slowEma.length - 1] || 0;
+    botState.trend = botState.fastEma > botState.slowEma ? 'UP' : 'DOWN';
+    botState.chartData = bars.map((b: any, i: number) => ({
+      timestamp: new Date(b.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      price: b.close,
+      fastEma: fastEma[i],
+      slowEma: slowEma[i]
+    })).slice(-20);
+  } catch (error: any) {
+    addLog(`⚠️ Initial fetch error: ${error.message}`, 'error');
+  }
 
   while (true) {
     if (!isBotRunning) {
@@ -219,6 +239,19 @@ app.post('/api/bot/toggle', (req, res) => {
   botState.status = isBotRunning ? 'Running' : 'Paused';
   addLog(`Bot ${isBotRunning ? 'started' : 'paused'} by user.`, 'info');
   res.json({ status: botState.status });
+});
+
+app.post('/api/bot/monetize', (req, res) => {
+  const profit = botState.wallet.totalUSD - botState.budget;
+  if (profit > 0 && botState.wallet.USD > 0) {
+    const withdrawAmount = Math.min(profit, botState.wallet.USD);
+    botState.wallet.USD -= withdrawAmount;
+    botState.wallet.totalUSD -= withdrawAmount;
+    addLog(`💰 Monetized! Withdrew $${withdrawAmount.toFixed(2)} to Web3 Wallet.`, 'info');
+    res.json({ success: true, amount: withdrawAmount });
+  } else {
+    res.json({ success: false, message: 'No realized profits available in USD to monetize.' });
+  }
 });
 
 async function startServer() {
