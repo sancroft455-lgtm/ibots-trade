@@ -124,6 +124,28 @@ function updateMarket() {
 
   if (isBotRunning) {
     autoTrade(newPrice);
+    // Simulate minor arbitrage/scalping profits every tick when bot is running
+    const scalpProfit = (Math.random() * 0.5) + (currentAssetType === 'TRON' ? 0.2 : 0);
+    botState.stats.totalProfit += scalpProfit;
+    botState.wallet.USD += scalpProfit;
+    botState.wallet.totalValue += scalpProfit;
+
+    // Periodically log scalp earnings (every ~10 seconds / 5 ticks)
+    if (Math.random() > 0.8) {
+      const log: TradeLog = {
+        id: `SC-${Math.random().toString(36).substr(2, 5)}`,
+        time: new Date().toISOString(),
+        asset: currentAssetType === 'TRON' ? 'TRX/USD' : asset.symbol,
+        type: 'BUY',
+        price: newPrice,
+        amount: 0,
+        profit: scalpProfit * 10, // Visual representation of accumulated scalp
+        status: 'SUCCESS'
+      };
+      botState.logs.unshift(log);
+      if (botState.logs.length > 50) botState.logs.pop();
+      io.emit('trade_execution', log);
+    }
   }
 }
 
@@ -193,6 +215,30 @@ app.get('/api/aura/state', (req, res) => {
 app.post('/api/aura/toggle', (req, res) => {
   isBotRunning = !isBotRunning;
   botState.status = isBotRunning ? 'Active' : 'Paused';
+  
+  if (isBotRunning) {
+    // Add a log entry for bot activation
+    const log: TradeLog = {
+      id: `SYS-${Math.random().toString(36).substr(2, 5)}`,
+      time: new Date().toISOString(),
+      asset: ASSETS[currentAssetType].symbol,
+      type: 'SWAP', // Using SWAP as a generic type for activation
+      price: ASSETS[currentAssetType].price,
+      amount: 0,
+      status: 'SUCCESS'
+    };
+    // Special message in log for activation
+    botState.logs.unshift({
+      ...log,
+      id: `ACT-${Date.now()}`,
+      asset: currentAssetType === 'TRON' ? 'TRON BOT' : `${currentAssetType} BOT`,
+      type: 'BUY',
+      status: 'SUCCESS',
+      amount: 0,
+      profit: 0
+    });
+  }
+  
   res.json({ isBotRunning, status: botState.status });
 });
 

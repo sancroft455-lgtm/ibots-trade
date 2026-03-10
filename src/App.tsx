@@ -64,10 +64,18 @@ interface BotState {
 
 // --- COMPONENTS ---
 
-const StatBox = ({ title, value, icon: Icon, trend, color = "emerald" }: any) => (
+const StatBox = ({ title, value, icon: Icon, trend, isLive, color = "emerald" }: any) => (
   <div className="glass-card p-4 flex flex-col justify-between group relative overflow-hidden">
     <div className="flex items-center justify-between text-zinc-500 mb-2">
-      <span className="text-[10px] font-bold uppercase tracking-widest group-hover:text-emerald-400 transition-colors">{title}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest group-hover:text-emerald-400 transition-colors">{title}</span>
+        {isLive && (
+          <span className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[8px] font-black text-emerald-500 tracking-tighter">LIVE</span>
+          </span>
+        )}
+      </div>
       <Icon className="w-4 h-4 opacity-50" />
     </div>
     <div className="flex items-end justify-between">
@@ -606,7 +614,13 @@ export default function App() {
           {/* STATS */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatBox title="Win Rate" value={`${state.stats.winRate}%`} icon={TrendingUp} trend={2.4} />
-            <StatBox title="Total Profit" value={`$${state.stats.totalProfit.toLocaleString()}`} icon={DollarSign} trend={12.1} />
+            <StatBox 
+              title="Total Profit" 
+              value={`$${state.stats.totalProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} 
+              icon={DollarSign} 
+              trend={12.1} 
+              isLive={state.isBotRunning}
+            />
             <StatBox title="Volatility" value={`${state.stats.volatility}%`} icon={Activity} trend={-1.2} />
             <StatBox title="Active Asset" value={state.activeAsset.symbol} icon={Globe} />
           </div>
@@ -686,7 +700,10 @@ export default function App() {
               )}
             >
               {state.isBotRunning ? <Square className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-              {state.isBotRunning ? 'HALT SYSTEM' : 'INITIATE BOT'}
+              {state.isBotRunning 
+                ? 'HALT SYSTEM' 
+                : (state.currentAssetType === 'TRON' ? 'INITIATE TRON BOT' : 'INITIATE BOT')
+              }
             </button>
             <button 
               onClick={() => setShowSwapModal(true)}
