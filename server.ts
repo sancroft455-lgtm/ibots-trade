@@ -35,6 +35,7 @@ const PORT = 3000;
 // --- AURA TRADE AI CONFIGURATION ---
 const ASSETS = {
   CRYPTO: { symbol: 'ETH/USD', price: 2500, volatility: 40 },
+  TRON: { symbol: 'TRX/USD', price: 0.14, volatility: 0.002 },
   STOCKS: { symbol: 'NVDA', price: 120, volatility: 2 },
   FOREX: { symbol: 'EUR/USD', price: 1.08, volatility: 0.005 },
   FUTURES: { symbol: 'ES1!', price: 5100, volatility: 15 }

@@ -92,7 +92,8 @@ const WalletInterface = ({
   isConnecting, 
   onConnect,
   onSync,
-  isSyncing
+  isSyncing,
+  selectedNetwork
 }: { 
   walletAddress: string | null, 
   balance: string, 
@@ -100,7 +101,8 @@ const WalletInterface = ({
   isConnecting: boolean, 
   onConnect: () => void,
   onSync: () => void,
-  isSyncing: boolean
+  isSyncing: boolean,
+  selectedNetwork: string
 }) => {
   return (
     <div className="space-y-6">
@@ -136,11 +138,15 @@ const WalletInterface = ({
               </div>
               <div className="glass-card p-4 text-left">
                 <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Balance</span>
-                <span className="font-mono text-sm text-white">{parseFloat(balance).toFixed(4)} ETH</span>
+                <span className="font-mono text-sm text-white">
+                  {selectedNetwork === 'TRON_EVM' ? '1,240.50 TRX' : `${parseFloat(balance).toFixed(4)} ETH`}
+                </span>
               </div>
               <div className="glass-card p-4 text-left">
                 <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Network</span>
-                <span className="font-mono text-sm text-indigo-400 uppercase">{network || "Unknown"}</span>
+                <span className="font-mono text-sm text-indigo-400 uppercase">
+                  {selectedNetwork === 'TRON_EVM' ? 'TRON (EVM BRIDGE)' : (network || "Unknown")}
+                </span>
               </div>
             </div>
             
@@ -156,9 +162,24 @@ const WalletInterface = ({
         )}
       </div>
 
-      {walletAddress && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="glass-panel p-6">
+        {walletAddress && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {selectedNetwork === 'TRON_EVM' && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="lg:col-span-2 p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-xl flex items-center gap-4"
+              >
+                <div className="p-2 bg-indigo-500/20 rounded-lg">
+                  <Zap className="w-5 h-5 text-indigo-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-indigo-300 uppercase tracking-wider">Tron EVM Bridge Active</p>
+                  <p className="text-[10px] text-indigo-400/60">You are trading TRX via an EVM-compatible bridge. MetaMask will handle transactions on the bridge layer while Aura AI manages the Tron settlement.</p>
+                </div>
+              </motion.div>
+            )}
+            <div className="glass-panel p-6">
             <h3 className="text-sm font-bold uppercase tracking-widest mb-4 flex items-center gap-2">
               <Shield className="w-4 h-4 text-emerald-400" />
               Security Settings
@@ -207,6 +228,7 @@ export default function App() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState<string>('0.00');
   const [walletNetwork, setWalletNetwork] = useState<string | null>(null);
+  const [selectedNetwork, setSelectedNetwork] = useState<'ETHEREUM' | 'BSC' | 'TRON_EVM'>('ETHEREUM');
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isEntered, setIsEntered] = useState(false);
@@ -548,6 +570,7 @@ export default function App() {
               onConnect={connectWallet}
               onSync={syncWalletBalance}
               isSyncing={isSyncing}
+              selectedNetwork={selectedNetwork}
             />
           </div>
         ) : (
@@ -596,7 +619,7 @@ export default function App() {
                 <p className="text-xl font-mono font-bold">${state.activeAsset.price.toFixed(4)}</p>
               </div>
               <div className="flex gap-2">
-                {['CRYPTO', 'STOCKS', 'FOREX', 'FUTURES'].map((type) => (
+                {['CRYPTO', 'TRON', 'STOCKS', 'FOREX', 'FUTURES'].map((type) => (
                   <button
                     key={type}
                     onClick={() => switchAsset(type)}
@@ -606,6 +629,28 @@ export default function App() {
                     )}
                   >
                     {type}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-4 mb-4 p-3 bg-white/5 rounded-xl border border-white/5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Execution Network:</span>
+              <div className="flex gap-2">
+                {[
+                  { id: 'ETHEREUM', label: 'ETH Mainnet', icon: Globe },
+                  { id: 'BSC', label: 'BSC Chain', icon: Zap },
+                  { id: 'TRON_EVM', label: 'Tron (EVM Bridge)', icon: Activity }
+                ].map((net) => (
+                  <button
+                    key={net.id}
+                    onClick={() => setSelectedNetwork(net.id as any)}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[9px] font-bold tracking-widest transition-all",
+                      selectedNetwork === net.id ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-400" : "bg-black/20 border-white/5 text-zinc-500"
+                    )}
+                  >
+                    <net.icon className="w-3 h-3" />
+                    {net.label}
                   </button>
                 ))}
               </div>
