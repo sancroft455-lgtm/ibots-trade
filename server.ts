@@ -246,6 +246,29 @@ app.post('/api/aura/withdraw', (req, res) => {
   res.json({ success: true, amount, method });
 });
 
+app.post('/api/aura/sync-wallet', (req, res) => {
+  const { balanceUSD } = req.body;
+  if (typeof balanceUSD === 'number') {
+    botState.wallet.USD = balanceUSD;
+    botState.wallet.totalValue = balanceUSD + Object.entries(botState.wallet.assets).reduce((acc, [symbol, amount]) => {
+      const asset = Object.values(ASSETS).find(a => a.symbol === symbol);
+      return acc + (amount * (asset?.price || 0));
+    }, 0);
+    botState.stats.balance = botState.wallet.totalValue;
+    
+    io.emit('market_update', {
+      price: ASSETS[currentAssetType].price,
+      asset: ASSETS[currentAssetType].symbol,
+      marketData: botState.marketData,
+      wallet: botState.wallet
+    });
+    
+    res.json({ success: true, wallet: botState.wallet });
+  } else {
+    res.status(400).json({ error: 'Invalid balance' });
+  }
+});
+
 // --- SERVER STARTUP ---
 setInterval(updateMarket, 2000);
 

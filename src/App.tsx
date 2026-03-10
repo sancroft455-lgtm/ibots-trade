@@ -85,31 +85,23 @@ const StatBox = ({ title, value, icon: Icon, trend, color = "emerald" }: any) =>
   </div>
 );
 
-const WalletInterface = () => {
-  const [walletAddress, setWalletAddress] = useState<string | null>(null);
-  const [balance, setBalance] = useState<string>('0.00');
-  const [network, setNetwork] = useState<string | null>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
-
-  const connect = async () => {
-    if (!window.ethereum) return alert("MetaMask not found");
-    setIsConnecting(true);
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const accounts = await provider.send("eth_requestAccounts", []);
-      const balance = await provider.getBalance(accounts[0]);
-      const network = await provider.getNetwork();
-      
-      setWalletAddress(accounts[0]);
-      setBalance(ethers.formatEther(balance));
-      setNetwork(network.name);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
+const WalletInterface = ({ 
+  walletAddress, 
+  balance, 
+  network, 
+  isConnecting, 
+  onConnect,
+  onSync,
+  isSyncing
+}: { 
+  walletAddress: string | null, 
+  balance: string, 
+  network: string | null, 
+  isConnecting: boolean, 
+  onConnect: () => void,
+  onSync: () => void,
+  isSyncing: boolean
+}) => {
   return (
     <div className="space-y-6">
       <div className="glass-panel p-8 flex flex-col items-center justify-center text-center relative overflow-hidden">
@@ -129,26 +121,37 @@ const WalletInterface = () => {
 
         {!walletAddress ? (
           <button 
-            onClick={connect}
+            onClick={onConnect}
             disabled={isConnecting}
             className="brutal-btn bg-emerald-500 text-black font-black px-12 py-4 rounded-2xl shadow-[0_0_30px_rgba(16,185,129,0.2)] hover:scale-105 transition-all disabled:opacity-50"
           >
             {isConnecting ? "AUTHORIZING..." : "CONNECT WALLET"}
           </button>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-3xl">
-            <div className="glass-card p-4 text-left">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Address</span>
-              <span className="font-mono text-sm text-emerald-400">{walletAddress.slice(0, 10)}...{walletAddress.slice(-8)}</span>
+          <div className="flex flex-col items-center w-full max-w-3xl gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+              <div className="glass-card p-4 text-left">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Address</span>
+                <span className="font-mono text-sm text-emerald-400">{walletAddress.slice(0, 10)}...{walletAddress.slice(-8)}</span>
+              </div>
+              <div className="glass-card p-4 text-left">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Balance</span>
+                <span className="font-mono text-sm text-white">{parseFloat(balance).toFixed(4)} ETH</span>
+              </div>
+              <div className="glass-card p-4 text-left">
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Network</span>
+                <span className="font-mono text-sm text-indigo-400 uppercase">{network || "Unknown"}</span>
+              </div>
             </div>
-            <div className="glass-card p-4 text-left">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Balance</span>
-              <span className="font-mono text-sm text-white">{parseFloat(balance).toFixed(4)} ETH</span>
-            </div>
-            <div className="glass-card p-4 text-left">
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Network</span>
-              <span className="font-mono text-sm text-indigo-400 uppercase">{network || "Unknown"}</span>
-            </div>
+            
+            <button 
+              onClick={onSync}
+              disabled={isSyncing}
+              className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all disabled:opacity-50"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", isSyncing && "animate-spin text-emerald-500")} />
+              {isSyncing ? "Syncing with Bot..." : "Sync Balance with Bot"}
+            </button>
           </div>
         )}
       </div>
@@ -202,6 +205,9 @@ export default function App() {
   const [state, setState] = useState<BotState | null>(null);
   const [loading, setLoading] = useState(true);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [walletBalance, setWalletBalance] = useState<string>('0.00');
+  const [walletNetwork, setWalletNetwork] = useState<string | null>(null);
+  const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isEntered, setIsEntered] = useState(false);
   const [securityKey, setSecurityKey] = useState('');
@@ -255,15 +261,52 @@ export default function App() {
 
   const connectWallet = async () => {
     if (window.ethereum) {
+      setIsConnectingWallet(true);
       try {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const accounts = await provider.send("eth_requestAccounts", []);
+        const balance = await provider.getBalance(accounts[0]);
+        const network = await provider.getNetwork();
+        
         setWalletAddress(accounts[0]);
+        setWalletBalance(ethers.formatEther(balance));
+        setWalletNetwork(network.name);
       } catch (e) {
         alert("Connection rejected");
+      } finally {
+        setIsConnectingWallet(false);
       }
     } else {
       alert("Please install MetaMask");
+    }
+  };
+
+  const syncWalletBalance = async () => {
+    if (!walletAddress || !state || !window.ethereum) return;
+    setIsSyncing(true);
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const balance = await provider.getBalance(walletAddress);
+      const ethBalance = ethers.formatEther(balance);
+      setWalletBalance(ethBalance);
+      
+      // Convert ETH to USD using current bot price
+      const balanceUSD = parseFloat(ethBalance) * state.activeAsset.price;
+      
+      const res = await fetch('/api/aura/sync-wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ balanceUSD })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setState(prev => prev ? { ...prev, wallet: data.wallet } : null);
+      }
+    } catch (e) {
+      console.error("Sync failed:", e);
+    } finally {
+      setTimeout(() => setIsSyncing(false), 1000);
     }
   };
 
@@ -497,7 +540,15 @@ export default function App() {
           </div>
         ) : activeTab === 'WALLET' ? (
           <div className="lg:col-span-12">
-            <WalletInterface />
+            <WalletInterface 
+              walletAddress={walletAddress}
+              balance={walletBalance}
+              network={walletNetwork}
+              isConnecting={isConnectingWallet}
+              onConnect={connectWallet}
+              onSync={syncWalletBalance}
+              isSyncing={isSyncing}
+            />
           </div>
         ) : (
           <>
@@ -624,7 +675,13 @@ export default function App() {
           <div className="glass-panel p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-500">Portfolio Balance</h2>
-              <RefreshCw className={cn("w-4 h-4 text-zinc-500", isSyncing && "animate-spin text-emerald-500")} />
+              <button 
+                onClick={syncWalletBalance}
+                disabled={!walletAddress || isSyncing}
+                className="p-1 hover:bg-white/5 rounded transition-colors disabled:opacity-30"
+              >
+                <RefreshCw className={cn("w-4 h-4 text-zinc-500", isSyncing && "animate-spin text-emerald-500")} />
+              </button>
             </div>
             <div className="text-3xl font-mono font-black tracking-tighter mb-6">
               ${state.wallet.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
