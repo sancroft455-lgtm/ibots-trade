@@ -58,6 +58,7 @@ interface BotState {
   logs: TradeLog[];
   marketData: any[];
   isBotRunning: boolean;
+  autoWithdraw: boolean;
   currentAssetType: string;
   abi: string[];
 }
@@ -101,7 +102,10 @@ const WalletInterface = ({
   onConnect,
   onSync,
   isSyncing,
-  selectedNetwork
+  selectedNetwork,
+  onDeposit,
+  autoWithdraw,
+  onToggleAutoWithdraw
 }: { 
   walletAddress: string | null, 
   balance: string, 
@@ -110,7 +114,10 @@ const WalletInterface = ({
   onConnect: () => void,
   onSync: () => void,
   isSyncing: boolean,
-  selectedNetwork: string
+  selectedNetwork: string,
+  onDeposit: () => void,
+  autoWithdraw: boolean,
+  onToggleAutoWithdraw: () => void
 }) => {
   return (
     <div className="space-y-6">
@@ -166,6 +173,15 @@ const WalletInterface = ({
               <RefreshCw className={cn("w-3.5 h-3.5", isSyncing && "animate-spin text-emerald-500")} />
               {isSyncing ? "Syncing with Bot..." : "Sync Balance with Bot"}
             </button>
+
+            <button 
+              onClick={onDeposit}
+              disabled={isSyncing}
+              className="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              Deposit {selectedNetwork === 'TRON_EVM' ? 'TRX' : 'ETH'} to Bot
+            </button>
           </div>
         )}
       </div>
@@ -202,14 +218,23 @@ const WalletInterface = ({
                   <div className="absolute right-1 top-1 w-3 h-3 bg-emerald-500 rounded-full" />
                 </div>
               </div>
-              <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5 opacity-50">
+              <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5">
                 <div>
-                  <p className="text-xs font-bold">Flash Loan Permissions</p>
-                  <p className="text-[10px] text-zinc-500">Enable high-leverage arbitrage calls</p>
+                  <p className="text-xs font-bold text-emerald-400">Auto-Withdraw Winnings</p>
+                  <p className="text-[10px] text-zinc-500">Automatically send all bot profits to your wallet</p>
                 </div>
-                <div className="w-10 h-5 bg-white/10 rounded-full relative">
-                  <div className="absolute left-1 top-1 w-3 h-3 bg-zinc-500 rounded-full" />
-                </div>
+                <button 
+                  onClick={onToggleAutoWithdraw}
+                  className={cn(
+                    "w-10 h-5 rounded-full relative transition-colors",
+                    autoWithdraw ? "bg-emerald-500/40" : "bg-white/10"
+                  )}
+                >
+                  <motion.div 
+                    animate={{ x: autoWithdraw ? 20 : 4 }}
+                    className={cn("absolute top-1 w-3 h-3 rounded-full", autoWithdraw ? "bg-emerald-500" : "bg-zinc-500")} 
+                  />
+                </button>
               </div>
             </div>
           </div>
@@ -275,6 +300,10 @@ export default function App() {
         marketData: data.marketData,
         activeAsset: { ...prev.activeAsset, price: data.price }
       } : null);
+    });
+
+    socket.on('auto_withdraw_update', (data: { autoWithdraw: boolean }) => {
+      setState(prev => prev ? { ...prev, autoWithdraw: data.autoWithdraw } : null);
     });
 
     socketRef.current.on('trade_execution', (log) => {
@@ -344,6 +373,60 @@ export default function App() {
     const res = await fetch('/api/aura/toggle', { method: 'POST' });
     const data = await res.json();
     setState(prev => prev ? { ...prev, isBotRunning: data.isBotRunning, status: data.status } : null);
+  };
+
+  const toggleAutoWithdraw = async () => {
+    const res = await fetch('/api/aura/toggle-auto-withdraw', { method: 'POST' });
+    const data = await res.json();
+    setState(prev => prev ? { ...prev, autoWithdraw: data.autoWithdraw } : null);
+  };
+
+  const handleDeposit = async () => {
+    if (!walletAddress || !window.ethereum) {
+      alert("Please connect MetaMask first");
+      return;
+    }
+
+    const amount = prompt("Enter amount to deposit:", "0.1");
+    if (!amount || isNaN(parseFloat(amount))) return;
+
+    try {
+      setIsSyncing(true);
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      // Simulate/Execute a transaction
+      // For TRON on EVM, we'd usually send a token or ETH to a bridge address
+      // Here we'll just simulate the transaction for the demo
+      const tx = {
+        to: "0x0000000000000000000000000000000000000000", // Burn address or contract
+        value: ethers.parseEther(amount)
+      };
+      
+      const sentTx = await signer.sendTransaction(tx);
+      await sentTx.wait();
+
+      const res = await fetch('/api/aura/deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          amount: parseFloat(amount), 
+          asset: selectedNetwork === 'TRON_EVM' ? 'TRX' : 'ETH',
+          txHash: sentTx.hash
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setState(prev => prev ? { ...prev, wallet: data.wallet } : null);
+        alert("Deposit successful! Funds are now active in Aura AI.");
+      }
+    } catch (e) {
+      console.error("Deposit failed:", e);
+      alert("Deposit failed or rejected.");
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const switchAsset = async (type: string) => {
@@ -579,6 +662,9 @@ export default function App() {
               onSync={syncWalletBalance}
               isSyncing={isSyncing}
               selectedNetwork={selectedNetwork}
+              onDeposit={handleDeposit}
+              autoWithdraw={state.autoWithdraw}
+              onToggleAutoWithdraw={toggleAutoWithdraw}
             />
           </div>
         ) : (

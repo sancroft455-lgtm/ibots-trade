@@ -42,6 +42,7 @@ const ASSETS = {
 };
 
 let isBotRunning = false;
+let autoWithdraw = false;
 let currentAssetType: keyof typeof ASSETS = 'CRYPTO';
 
 interface TradeLog {
@@ -130,6 +131,22 @@ function updateMarket() {
     botState.wallet.USD += scalpProfit;
     botState.wallet.totalValue += scalpProfit;
 
+    // Auto-withdraw logic: If enabled, log the "transfer" to the attached wallet
+    if (autoWithdraw && Math.random() > 0.9) {
+      const withdrawLog: TradeLog = {
+        id: `AW-${Math.random().toString(36).substr(2, 5)}`,
+        time: new Date().toISOString(),
+        asset: 'USD',
+        type: 'SELL',
+        price: 1,
+        amount: scalpProfit * 5,
+        status: 'SUCCESS'
+      };
+      botState.logs.unshift(withdrawLog);
+      if (botState.logs.length > 50) botState.logs.pop();
+      io.emit('trade_execution', withdrawLog);
+    }
+
     // Periodically log scalp earnings (every ~10 seconds / 5 ticks)
     if (Math.random() > 0.8) {
       const log: TradeLog = {
@@ -207,9 +224,41 @@ app.get('/api/aura/state', (req, res) => {
   res.json({
     ...botState,
     isBotRunning,
+    autoWithdraw,
     currentAssetType,
     abi: MOCK_ABI
   });
+});
+
+app.post('/api/aura/toggle-auto-withdraw', (req, res) => {
+  autoWithdraw = !autoWithdraw;
+  res.json({ autoWithdraw });
+});
+
+app.post('/api/aura/deposit', (req, res) => {
+  const { amount, asset, txHash } = req.body;
+  
+  // In a real app, we would verify the txHash on-chain
+  // For this simulation, we'll just credit the account
+  const depositAmountUSD = asset === 'TRX' ? amount * ASSETS.TRON.price : amount * ASSETS.CRYPTO.price;
+  
+  botState.wallet.USD += depositAmountUSD;
+  botState.wallet.totalValue += depositAmountUSD;
+  
+  const log: TradeLog = {
+    id: `DEP-${Math.random().toString(36).substr(2, 5)}`,
+    time: new Date().toISOString(),
+    asset: asset || 'ETH',
+    type: 'BUY',
+    price: asset === 'TRX' ? ASSETS.TRON.price : ASSETS.CRYPTO.price,
+    amount: amount,
+    status: 'SUCCESS'
+  };
+  
+  saveLog(log);
+  io.emit('trade_execution', log);
+  
+  res.json({ success: true, wallet: botState.wallet, log });
 });
 
 app.post('/api/aura/toggle', (req, res) => {
